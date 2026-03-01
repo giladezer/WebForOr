@@ -1,93 +1,563 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>One More Chance</title>
 
 <style>
-    body {
-        margin: 0;
-        height: 100vh;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        font-family: 'Segoe UI', sans-serif;
-        background: linear-gradient(135deg, #ff9a9e, #fecfef);
-        overflow: hidden;
-    }
+  body{
+    margin:0;
+    height:100vh;
+    display:grid;
+    place-items:center;
+    font-family:"Segoe UI",sans-serif;
+    background: linear-gradient(135deg, #ff9a9e, #fecfef);
+    overflow:hidden;
+  }
+  .card{
+    background:white;
+    padding:50px;
+    border-radius:25px;
+    text-align:center;
+    box-shadow:0 15px 40px rgba(0,0,0,0.15);
+    max-width:420px;
+  }
+  h1{
+    color:#e91e63;
+    margin-bottom:26px;
+    font-size:28px;
+  }
+  button{
+    padding:12px 30px;
+    font-size:18px;
+    border:none;
+    border-radius:12px;
+    cursor:pointer;
+    margin:10px;
+    transition:0.25s ease;
+    user-select:none;
+  }
+  #yesBtn{
+    background:#ff4d6d;
+    color:white;
+    box-shadow:0 0 20px rgba(255,77,109,0.35);
+  }
+  #yesBtn:hover{ transform:scale(1.07); }
 
-    .card {
-        background: white;
-        padding: 50px;
-        border-radius: 25px;
-        text-align: center;
-        box-shadow: 0 15px 40px rgba(0,0,0,0.15);
-        max-width: 420px;
-        transition: 0.5s;
-    }
+  #noBtn{
+    background:#ddd;
+    position:relative;
+  }
 
-    h1 {
-        color: #e91e63;
-        margin-bottom: 30px;
-        font-size: 28px;
-    }
+  /* Bouquet screen */
+  #roseScreen{
+    position:fixed;
+    inset:0;
+    display:none;
+    background:#ffffff;
+  }
+  #roseCanvas{
+    width:100%;
+    height:100%;
+    display:block;
+  }
+  #roseText{
+    position:fixed;
+    left:50%;
+    top:7%;
+    transform:translateX(-50%);
+    color:#222;
+    font-size:clamp(18px, 2.6vw, 30px);
+    text-align:center;
+    letter-spacing:0.2px;
+    pointer-events:none;
+    padding:0 16px;
+    line-height:1.25;
+  }
 
-    button {
-        padding: 12px 30px;
-        font-size: 18px;
-        border: none;
-        border-radius: 12px;
-        cursor: pointer;
-        margin: 10px;
-        transition: 0.3s ease;
-    }
-
-    #yesBtn {
-        background-color: #ff4d6d;
-        color: white;
-        box-shadow: 0 0 20px rgba(255,77,109,0.4);
-    }
-
-    #yesBtn:hover {
-        transform: scale(1.08);
-    }
-
-    #noBtn {
-        background-color: #ddd;
-        position: relative;
-    }
+  /* Nice popup (instead of alert) */
+  #popup{
+    position:fixed;
+    inset:0;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    background:rgba(0,0,0,0.25);
+    z-index:10;
+    padding:18px;
+  }
+  #popupCard{
+    background:white;
+    border-radius:18px;
+    box-shadow:0 18px 60px rgba(0,0,0,0.25);
+    max-width:420px;
+    width:min(420px, 92vw);
+    padding:18px 18px 14px;
+    text-align:center;
+  }
+  #popupCard h2{
+    margin:6px 0 8px;
+    font-size:20px;
+    color:#e91e63;
+  }
+  #popupCard p{
+    margin:0 0 14px;
+    color:#444;
+    line-height:1.35;
+  }
+  #popupCard button{
+    background:#ff4d6d;
+    color:#fff;
+    border-radius:12px;
+    padding:10px 18px;
+    font-size:16px;
+  }
 </style>
 </head>
 
 <body>
-
-<div class="card" id="card">
+  <div class="card" id="card">
     <h1>Will you try again with me?</h1>
-    <button id="yesBtn" onclick="sayYes()">Yes</button>
-    <button id="noBtn" onmouseover="moveButton()">No</button>
-</div>
+    <button id="yesBtn">Yes</button>
+    <button id="noBtn">No</button>
+  </div>
+
+  <div id="roseScreen">
+    <div id="roseText">Okay. Let’s try it again. at your pace.</div>
+    <canvas id="roseCanvas"></canvas>
+  </div>
+
+  <div id="popup">
+    <div id="popupCard">
+      <h2>😂</h2>
+      <p id="popupMsg">Hahaha you really thought so.</p>
+      <button id="popupOk">Okay</button>
+    </div>
+  </div>
 
 <script>
-    function sayYes() {
-        const card = document.getElementById("card");
-        card.innerHTML = `
-            <h1 style="font-size:24px;">
-                yaaaaay.<br><br>
-                Let’s do it right this time and at your pace.
-            </h1>
-        `;
+  // ----------------------------
+  // NO BUTTON ESCAPE (6 times)
+  // ----------------------------
+  const ESCAPE_LIMIT = 6;
+  let escapeCount = 0;
+
+  const noBtn = document.getElementById("noBtn");
+  const yesBtn = document.getElementById("yesBtn");
+
+  // Escape on hover AND on touch (mobile) until limit
+  noBtn.addEventListener("mouseover", tryEscape);
+  noBtn.addEventListener("pointerdown", (e) => {
+    // on phones this makes it escape when they try to tap it (until limit)
+    if (escapeCount < ESCAPE_LIMIT) {
+      e.preventDefault();
+      tryEscape();
+    }
+  });
+
+  function tryEscape(){
+    if (!noBtn.isConnected) return;
+    if (escapeCount < ESCAPE_LIMIT) {
+      escapeCount++;
+      moveNoButton();
+
+      if (escapeCount === ESCAPE_LIMIT) {
+        noBtn.textContent = "No (finally)";
+      }
+    }
+  }
+
+  // When she finally clicks "No" after 6 escapes:
+  noBtn.addEventListener("click", () => {
+    if (escapeCount >= ESCAPE_LIMIT) {
+      showPopup("Hahaha you really thought so 😭");
+      noBtn.remove();
+    } else {
+      // before limit, keep being annoying
+      tryEscape();
+    }
+  });
+
+  function moveNoButton(){
+    const x = Math.random() * (window.innerWidth - 140);
+    const y = Math.random() * (window.innerHeight - 80);
+    noBtn.style.position = "absolute";
+    noBtn.style.left = x + "px";
+    noBtn.style.top = y + "px";
+  }
+
+  // ----------------------------
+  // Popup helpers
+  // ----------------------------
+  const popup = document.getElementById("popup");
+  const popupMsg = document.getElementById("popupMsg");
+  const popupOk = document.getElementById("popupOk");
+
+  function showPopup(msg){
+    popupMsg.textContent = msg;
+    popup.style.display = "flex";
+  }
+  function hidePopup(){
+    popup.style.display = "none";
+  }
+  popupOk.addEventListener("click", hidePopup);
+  popup.addEventListener("click", (e) => {
+    if (e.target === popup) hidePopup();
+  });
+
+  // ----------------------------
+  // YES -> WHITE BACKGROUND + BOUQUET
+  // ----------------------------
+  yesBtn.addEventListener("click", () => {
+    document.getElementById("card").style.display = "none";
+    document.getElementById("roseScreen").style.display = "block";
+    startBouquet();
+  });
+
+  function startBouquet(){
+    const canvas = document.getElementById("roseCanvas");
+    const ctx = canvas.getContext("2d");
+
+    function resize(){
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      canvas.width = Math.floor(window.innerWidth * dpr);
+      canvas.height = Math.floor(window.innerHeight * dpr);
+      canvas.style.width = window.innerWidth + "px";
+      canvas.style.height = window.innerHeight + "px";
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+    }
+    resize();
+    window.addEventListener("resize", resize);
+
+    const clamp01 = v => Math.max(0, Math.min(1, v));
+
+    function strokeReveal(pathFn, t, strokeStyle, lineWidth){
+      ctx.save();
+      ctx.strokeStyle = strokeStyle;
+      ctx.lineWidth = lineWidth;
+      ctx.beginPath();
+      pathFn(ctx);
+      const len = 2400;
+      ctx.setLineDash([len]);
+      ctx.lineDashOffset = len * (1 - t);
+      ctx.stroke();
+      ctx.restore();
     }
 
-    function moveButton() {
-        const button = document.getElementById("noBtn");
-        const x = Math.random() * (window.innerWidth - 120);
-        const y = Math.random() * (window.innerHeight - 60);
-        button.style.position = "absolute";
-        button.style.left = x + "px";
-        button.style.top = y + "px";
+    function fillAlpha(pathFn, alpha, fillStyle){
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = fillStyle;
+      ctx.beginPath();
+      pathFn(ctx);
+      ctx.fill();
+      ctx.restore();
     }
+
+    // Rose builder
+    function makeRose(x, y, s, tilt=0){
+      const parts = [];
+
+      function petal(scale, rot){
+        return function(c){
+          c.save();
+          c.translate(x, y);
+          c.rotate(tilt);
+          c.rotate(rot);
+          c.scale(s * scale, s * scale);
+          c.moveTo(0, 0);
+          c.bezierCurveTo(20, -10, 28, -38, 0, -54);
+          c.bezierCurveTo(-28, -38, -20, -10, 0, 0);
+          c.restore();
+        };
+      }
+
+      const rots = [0, 0.9, 1.8, 2.85, 3.75, 4.65, 5.55];
+      rots.forEach(r => parts.push({type:"petal", fn:petal(1.00, r)}));
+      rots.forEach(r => parts.push({type:"petal", fn:petal(0.78, r + 0.22)}));
+      rots.slice(0,5).forEach(r => parts.push({type:"petal", fn:petal(0.58, r + 0.10)}));
+
+      parts.push({type:"center", fn:function(c){
+        c.save();
+        c.translate(x, y);
+        c.rotate(tilt);
+        c.scale(s, s);
+        c.moveTo(0, -12);
+        c.bezierCurveTo(18, -24, 18, 8, 0, 12);
+        c.bezierCurveTo(-14, 16, -20, -2, -2, -10);
+        c.restore();
+      }});
+
+      parts.push({type:"stem", fn:function(c){
+        c.save();
+        c.translate(x, y);
+        c.rotate(tilt);
+        c.scale(s, s);
+        c.moveTo(0, 6);
+        c.bezierCurveTo(6, 40, 10, 95, 2, 150);
+        c.restore();
+      }});
+
+      parts.push({type:"leaf", fn:function(c){
+        c.save();
+        c.translate(x, y);
+        c.rotate(tilt);
+        c.scale(s, s);
+        c.moveTo(2, 78);
+        c.bezierCurveTo(-36, 66, -58, 95, -26, 116);
+        c.bezierCurveTo(-10, 128, -6, 106, 8, 96);
+        c.restore();
+      }});
+
+      parts.push({type:"leaf", fn:function(c){
+        c.save();
+        c.translate(x, y);
+        c.rotate(tilt);
+        c.scale(s, s);
+        c.moveTo(0, 96);
+        c.bezierCurveTo(36, 84, 60, 118, 22, 136);
+        c.bezierCurveTo(10, 144, 6, 124, -2, 110);
+        c.restore();
+      }});
+
+      return parts;
+    }
+
+    // Wrapper (paper cone) + ribbon
+    function wrapperPath(){
+      const cx = window.innerWidth * 0.5;
+      const bottom = window.innerHeight * 0.93;
+      const top = window.innerHeight * 0.60;
+      const w = Math.min(680, window.innerWidth * 0.88);
+      return function(c){
+        c.moveTo(cx - w*0.54, top);
+        c.lineTo(cx + w*0.54, top);
+        c.lineTo(cx + w*0.30, bottom);
+        c.lineTo(cx, bottom - 52);
+        c.lineTo(cx - w*0.30, bottom);
+        c.closePath();
+      };
+    }
+
+    function ribbonPath(){
+      const cx = window.innerWidth * 0.5;
+      const y = window.innerHeight * 0.83;
+      return function(c){
+        c.moveTo(cx-18, y);
+        c.quadraticCurveTo(cx, y-16, cx+18, y);
+        c.quadraticCurveTo(cx, y+18, cx-18, y);
+        c.closePath();
+        c.moveTo(cx-18, y+4);
+        c.quadraticCurveTo(cx-70, y+10, cx-120, y-20);
+        c.quadraticCurveTo(cx-92, y+30, cx-58, y+42);
+        c.quadraticCurveTo(cx-34, y+26, cx-18, y+4);
+        c.closePath();
+        c.moveTo(cx+18, y+4);
+        c.quadraticCurveTo(cx+70, y+10, cx+120, y-20);
+        c.quadraticCurveTo(cx+92, y+30, cx+58, y+42);
+        c.quadraticCurveTo(cx+34, y+26, cx+18, y+4);
+        c.closePath();
+      };
+    }
+
+    // Filler flowers ("baby's breath")
+    function makeFillerCluster(cx, cy, r){
+      const dots = [];
+      const count = 20; // more dots
+      for (let i=0;i<count;i++){
+        const ang = Math.random()*Math.PI*2;
+        const dist = Math.random()*r;
+        const x = cx + Math.cos(ang)*dist;
+        const y = cy + Math.sin(ang)*dist;
+        const rad = 2.2 + Math.random()*2.8;
+        dots.push(function(c){
+          c.moveTo(x+rad, y);
+          c.arc(x, y, rad, 0, Math.PI*2);
+        });
+      }
+      return dots;
+    }
+
+    // BIG bouquet: 13 roses
+    const baseX = window.innerWidth * 0.5;
+    const baseY = window.innerHeight * 0.50;
+
+    const roseSpecs = [
+      // back row
+      {dx:-270, dy:-5,   s:1.02, tilt:-0.25},
+      {dx:-190, dy:-45,  s:1.12, tilt:-0.14},
+      {dx:-110, dy:-65,  s:1.22, tilt:-0.08},
+      {dx: -20, dy:-72,  s:1.28, tilt:-0.03},
+      {dx:  80, dy:-65,  s:1.24, tilt: 0.06},
+      {dx: 170, dy:-48,  s:1.14, tilt: 0.12},
+      {dx: 255, dy:-5,   s:1.02, tilt: 0.24},
+
+      // mid row
+      {dx:-210, dy: 35,  s:1.02, tilt:-0.18},
+      {dx:-110, dy: 22,  s:1.16, tilt:-0.07},
+      {dx:   5, dy: 18,  s:1.18, tilt: 0.00},
+      {dx: 115, dy: 24,  s:1.12, tilt: 0.09},
+      {dx: 210, dy: 42,  s:1.00, tilt: 0.18},
+
+      // front highlight rose
+      {dx:   0, dy: 92,  s:1.32, tilt: 0.00},
+    ];
+
+    const bouquet = roseSpecs.map(r =>
+      makeRose(baseX + r.dx, baseY + r.dy, r.s, r.tilt)
+    );
+
+    // More filler clusters
+    const fillers = [
+      ...makeFillerCluster(baseX - 190, baseY - 140, 70),
+      ...makeFillerCluster(baseX + 200, baseY - 135, 70),
+      ...makeFillerCluster(baseX - 30,  baseY - 190, 65),
+      ...makeFillerCluster(baseX + 40,  baseY - 210, 55),
+    ];
+
+    // Timeline (slower)
+    const timeline = [];
+    timeline.push({ kind:"wrapperFill", start: 700, dur: 2600 });
+    timeline.push({ kind:"wrapperLine", start: 1050, dur: 3600 });
+    timeline.push({ kind:"ribbonFill",  start: 3600, dur: 1900 });
+    timeline.push({ kind:"ribbonLine",  start: 3850, dur: 2500 });
+    timeline.push({ kind:"fillers", start: 1650, dur: 6500 });
+
+    let tStart = 1700;
+    for (let i=0;i<bouquet.length;i++){
+      timeline.push({ kind:"rose", roseIndex:i, phase:"petals", start:tStart, dur: 8600 });
+      timeline.push({ kind:"rose", roseIndex:i, phase:"stem",   start:tStart + 5600, dur: 5600 });
+      tStart += 480;
+    }
+
+    const totalEnd = timeline
+      .map(x => x.start + x.dur)
+      .reduce((a,b)=>Math.max(a,b), 0) + 900;
+
+    // Colors (colored!)
+    const colors = {
+      petalFill: "rgba(255, 60, 120, 0.42)",
+      petalLine: "rgba(205, 20, 80, 0.98)",
+      petalHi:   "rgba(255, 185, 210, 0.85)",
+      centerFill:"rgba(255, 90, 140, 0.55)",
+      stemLine:  "rgba(30, 125, 70, 0.98)",
+      leafFill:  "rgba(60, 180, 105, 0.28)",
+      leafLine:  "rgba(30, 125, 70, 0.98)",
+      paperFill: "#c7a27a",
+      paperLine: "rgba(160,120,85,0.60)",
+      ribbonFill:"#ff4d6d",
+      ribbonLine:"rgba(170, 20, 70, 0.75)",
+      fillerFill:"rgba(245,245,245,0.90)",
+      fillerLine:"rgba(215, 215, 215, 0.85)",
+    };
+
+    function drawRosePart(roseIndex, phase, progress){
+      const parts = bouquet[roseIndex];
+      const petalParts = parts.filter(p => p.type === "petal");
+      const centerPart = parts.find(p => p.type === "center");
+      const stemPart   = parts.find(p => p.type === "stem");
+      const leafParts  = parts.filter(p => p.type === "leaf");
+
+      if (phase === "petals"){
+        const n = petalParts.length;
+        const pProg = clamp01(progress);
+
+        for (let i=0;i<n;i++){
+          const sliceStart = i / n;
+          const sliceEnd   = (i+1) / n;
+          const local = clamp01((pProg - sliceStart) / (sliceEnd - sliceStart));
+          if (local > 0){
+            fillAlpha(petalParts[i].fn, 0.26 * local, colors.petalFill);
+            strokeReveal(petalParts[i].fn, local, colors.petalLine, 2.25);
+            strokeReveal(petalParts[i].fn, local, colors.petalHi, 1.05);
+          }
+        }
+
+        const cProg = clamp01((pProg - 0.72) / 0.28);
+        if (cProg > 0 && centerPart){
+          fillAlpha(centerPart.fn, 0.28 * cProg, colors.centerFill);
+          strokeReveal(centerPart.fn, cProg, colors.petalLine, 2.2);
+        }
+      }
+
+      if (phase === "stem"){
+        const sProg = clamp01(progress);
+
+        if (stemPart){
+          strokeReveal(stemPart.fn, sProg, colors.stemLine, 2.7);
+        }
+
+        const lProg = clamp01((sProg - 0.22) / 0.78);
+        if (lProg > 0){
+          for (const leaf of leafParts){
+            fillAlpha(leaf.fn, 0.24 * lProg, colors.leafFill);
+            strokeReveal(leaf.fn, lProg, colors.leafLine, 2.35);
+          }
+        }
+      }
+    }
+
+    const startTime = performance.now();
+
+    function draw(now){
+      const t = now - startTime;
+
+      ctx.clearRect(0,0,window.innerWidth, window.innerHeight);
+
+      // soft shadow under bouquet
+      ctx.save();
+      ctx.globalAlpha = 0.08;
+      ctx.beginPath();
+      ctx.ellipse(window.innerWidth*0.5, window.innerHeight*0.80, 280, 85, 0, 0, Math.PI*2);
+      ctx.fillStyle = "#000";
+      ctx.fill();
+      ctx.restore();
+
+      // wrapper
+      const wp = wrapperPath();
+      const wf = clamp01((t - 700) / 2600);
+      if (wf > 0) fillAlpha(wp, 0.14 * wf, colors.paperFill);
+
+      const wl = clamp01((t - 1050) / 3600);
+      if (wl > 0) strokeReveal(wp, wl, colors.paperLine, 3);
+
+      // ribbon
+      const rp = ribbonPath();
+      const rf = clamp01((t - 3600) / 1900);
+      if (rf > 0) fillAlpha(rp, 0.26 * rf, colors.ribbonFill);
+
+      const rl = clamp01((t - 3850) / 2500);
+      if (rl > 0) strokeReveal(rp, rl, colors.ribbonLine, 2.4);
+
+      // fillers
+      const fp = clamp01((t - 1650) / 6500);
+      if (fp > 0){
+        for (let i=0;i<fillers.length;i++){
+          const sliceStart = i / fillers.length;
+          const local = clamp01((fp - sliceStart) * 7);
+          if (local > 0){
+            fillAlpha(fillers[i], 0.22 * local, colors.fillerFill);
+            strokeReveal(fillers[i], local, colors.fillerLine, 1.15);
+          }
+        }
+      }
+
+      // roses
+      for (const item of timeline){
+        if (item.kind !== "rose") continue;
+        const prog = clamp01((t - item.start) / item.dur);
+        if (prog <= 0) continue;
+        drawRosePart(item.roseIndex, item.phase, prog);
+      }
+
+      if (t < totalEnd) requestAnimationFrame(draw);
+    }
+
+    requestAnimationFrame(draw);
+  }
 </script>
-
 </body>
 </html>
